@@ -1,9 +1,11 @@
+// @generated automatically by Diesel CLI.
+
 diesel::table! {
     users (id) {
-        id -> VarChar,
-        name -> VarChar,
-        email -> VarChar,
-        password -> VarChar,
+        id -> Varchar,
+        name -> Varchar,
+        email -> Varchar,
+        password -> Varchar,
         created_at -> Timestamptz,
     }
 }
