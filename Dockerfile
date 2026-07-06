@@ -1,4 +1,4 @@
-FROM rust:latest-slim-bookworm AS builder
+FROM rust:slim-bookworm AS builder
 
 RUN apt-get update && apt-get install -y libpq-dev pkg-config && rm -rf /var/lib/apt/lists/*
 
