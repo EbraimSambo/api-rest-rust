@@ -63,6 +63,7 @@ cargo run
 |--------|------------------|----------------------------------|
 | GET    | `/`              | Health check                     |
 | GET    | `/users`         | Listar users paginados           |
+| POST   | `/users`         | Criar novo user                  |
 
 ### GET /users
 
@@ -86,6 +87,46 @@ Resposta:
   "per_page": 20,
   "total": 0,
   "total_pages": 0
+}
+```
+
+### POST /users
+
+Cria um novo user. A password é encriptada com **Argon2** e o `id` é gerado automaticamente como UUID.
+
+Body:
+
+| Campo      | Tipo   | Obrigatório | Descrição                         |
+|------------|--------|-------------|-----------------------------------|
+| `name`     | string | sim         | Nome do user (max 100 caracteres) |
+| `email`    | string | sim         | Email válido                      |
+| `password` | string | sim         | Senha (mínimo 6 caracteres)       |
+
+Exemplo:
+```bash
+curl -X POST "http://localhost:8080/users" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"João Silva","email":"joao@email.com","password":"123456"}'
+```
+
+Resposta sucesso (201):
+```json
+{
+  "id": "a8d0f4f7-5657-4be9-8367-74f553995efd",
+  "name": "João Silva",
+  "email": "joao@email.com",
+  "created_at": "2026-07-06T13:49:21Z"
+}
+```
+
+Erro de validação (422):
+```json
+{
+  "errors": [
+    {"field": "name", "message": "Nome é obrigatório"},
+    {"field": "email", "message": "Email inválido"},
+    {"field": "password", "message": "Senha deve ter no mínimo 6 caracteres"}
+  ]
 }
 ```
 
