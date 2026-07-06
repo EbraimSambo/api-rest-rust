@@ -6,11 +6,11 @@ use serde::{Deserialize, Serialize};
 #[diesel(table_name = crate::schema::users)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct User {
-    #[serde(skip_serializing)]
-    pub password: String,
     pub id: String,
     pub name: String,
     pub email: String,
+    #[serde(skip_serializing)]
+    pub password: String,
     pub created_at: DateTime<Utc>,
 }
 
