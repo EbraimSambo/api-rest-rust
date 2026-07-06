@@ -8,7 +8,7 @@ COPY src ./src
 COPY migrations ./migrations
 COPY diesel.toml .
 
-RUN PQ_LIB_DIR= cargo build --release
+RUN cargo build --release
 
 FROM debian:bookworm-slim
 
