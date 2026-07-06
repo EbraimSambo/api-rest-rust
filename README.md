@@ -31,8 +31,14 @@ src/
 ## Pré-requisitos
 
 - Rust (edition 2024)
-- PostgreSQL
+- PostgreSQL (com `libpq` — `sudo apt install libpq-dev`)
 - diesel_cli (`cargo install diesel_cli --no-default-features --features postgres`)
+
+> Se o linker falhar com `unable to find library -lpq`, cria um symlink local:
+> ```bash
+> ln -s /usr/lib64/libpq.so.5 libpq.so
+> ```
+> O `.cargo/config.toml` já define `PQ_LIB_DIR` apontando para a raiz do projecto.
 
 ## Setup
 
