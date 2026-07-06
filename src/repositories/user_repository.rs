@@ -1,7 +1,7 @@
 use diesel::prelude::*;
 use diesel::PgConnection;
 
-use crate::models::user::User;
+use crate::models::user::{NewUser, User};
 use crate::schema::users;
 
 pub fn find_all_paginated(
@@ -20,4 +20,10 @@ pub fn find_all_paginated(
         .load::<User>(conn)?;
 
     Ok((items, total))
+}
+
+pub fn insert(conn: &mut PgConnection, new_user: &NewUser) -> QueryResult<User> {
+    diesel::insert_into(users::table)
+        .values(new_user)
+        .get_result(conn)
 }

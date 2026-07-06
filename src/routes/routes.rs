@@ -1,6 +1,7 @@
-use actix_web::{get, web, HttpResponse, Responder};
+use actix_web::{get, post, web, HttpResponse, Responder};
 use serde::Deserialize;
 
+use crate::models::user::CreateUserRequest;
 use crate::services::user_service::{self, DbPool};
 
 #[get("/")]
@@ -25,5 +26,23 @@ async fn list_users(
     match user_service::get_users_paginated(pool.get_ref(), page, per_page) {
         Ok(result) => HttpResponse::Ok().json(result),
         Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e})),
+    }
+}
+
+#[post("/users")]
+async fn create_user(
+    pool: web::Data<DbPool>,
+    body: web::Json<CreateUserRequest>,
+) -> impl Responder {
+    use user_service::CreateUserError;
+
+    match user_service::create_user(pool.get_ref(), body.into_inner()) {
+        Ok(user) => HttpResponse::Created().json(user),
+        Err(CreateUserError::Validation(errors)) => {
+            HttpResponse::UnprocessableEntity().json(serde_json::json!({"errors": errors}))
+        }
+        Err(CreateUserError::Internal(err)) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": err}))
+        }
     }
 }

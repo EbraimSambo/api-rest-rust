@@ -1,7 +1,12 @@
+use argon2::password_hash::SaltString;
+use argon2::{Argon2, PasswordHasher};
+use chrono::Utc;
 use diesel::r2d2::{ConnectionManager, Pool};
 use diesel::PgConnection;
+use rand::rngs::OsRng;
+use uuid::Uuid;
 
-use crate::models::user::User;
+use crate::models::user::{CreateUserRequest, NewUser, User, UserResponse};
 use crate::repositories::user_repository;
 
 pub type DbPool = Pool<ConnectionManager<PgConnection>>;
@@ -13,6 +18,91 @@ pub struct PaginatedUsers {
     pub per_page: i64,
     pub total: i64,
     pub total_pages: i64,
+}
+
+#[derive(serde::Serialize)]
+pub struct ValidationError {
+    pub field: String,
+    pub message: String,
+}
+
+pub enum CreateUserError {
+    Validation(Vec<ValidationError>),
+    Internal(String),
+}
+
+fn validate_input(req: &CreateUserRequest) -> Result<(), Vec<ValidationError>> {
+    let mut errors = Vec::new();
+
+    let name = req.name.trim();
+    if name.is_empty() {
+        errors.push(ValidationError {
+            field: "name".into(),
+            message: "Nome é obrigatório".into(),
+        });
+    } else if name.len() > 100 {
+        errors.push(ValidationError {
+            field: "name".into(),
+            message: "Nome deve ter no máximo 100 caracteres".into(),
+        });
+    }
+
+    let email = req.email.trim();
+    if email.is_empty() {
+        errors.push(ValidationError {
+            field: "email".into(),
+            message: "Email é obrigatório".into(),
+        });
+    } else if !email.contains('@') || !email.contains('.') {
+        errors.push(ValidationError {
+            field: "email".into(),
+            message: "Email inválido".into(),
+        });
+    }
+
+    if req.password.len() < 6 {
+        errors.push(ValidationError {
+            field: "password".into(),
+            message: "Senha deve ter no mínimo 6 caracteres".into(),
+        });
+    }
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
+}
+
+pub fn create_user(
+    pool: &DbPool,
+    req: CreateUserRequest,
+) -> Result<UserResponse, CreateUserError> {
+    validate_input(&req).map_err(CreateUserError::Validation)?;
+
+    let salt = SaltString::generate(&mut OsRng);
+    let argon2 = Argon2::default();
+    let password_hash = argon2
+        .hash_password(req.password.as_bytes(), &salt)
+        .map_err(|e| CreateUserError::Internal(format!("Erro ao gerar hash: {}", e)))?
+        .to_string();
+
+    let new_user = NewUser {
+        id: Uuid::new_v4().to_string(),
+        name: req.name.trim().to_string(),
+        email: req.email.trim().to_string(),
+        password: password_hash,
+        created_at: Utc::now(),
+    };
+
+    let mut conn = pool
+        .get()
+        .map_err(|e| CreateUserError::Internal(format!("Erro de conexão: {}", e)))?;
+
+    let user = user_repository::insert(&mut conn, &new_user)
+        .map_err(|e| CreateUserError::Internal(format!("Erro ao inserir usuário: {}", e)))?;
+
+    Ok(UserResponse::from(user))
 }
 
 pub fn get_users_paginated(
