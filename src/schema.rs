@@ -2,7 +2,7 @@
 
 diesel::table! {
     users (id) {
-        id -> Varchar,
+        id -> Int4,
         name -> Varchar,
         email -> Varchar,
         password -> Varchar,

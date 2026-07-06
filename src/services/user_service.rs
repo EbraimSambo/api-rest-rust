@@ -4,7 +4,6 @@ use chrono::Utc;
 use diesel::r2d2::{ConnectionManager, Pool};
 use diesel::PgConnection;
 use rand::rngs::OsRng;
-use uuid::Uuid;
 
 use crate::models::user::{CreateUserRequest, NewUser, User, UserResponse};
 use crate::repositories::user_repository;
@@ -88,7 +87,6 @@ pub fn create_user(
         .to_string();
 
     let new_user = NewUser {
-        id: Uuid::new_v4().to_string(),
         name: req.name.trim().to_string(),
         email: req.email.trim().to_string(),
         password: password_hash,
