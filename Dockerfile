@@ -4,12 +4,11 @@ RUN apt-get update && apt-get install -y libpq-dev pkg-config && rm -rf /var/lib
 
 WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
-COPY .cargo ./.cargo
 COPY src ./src
 COPY migrations ./migrations
 COPY diesel.toml .
 
-RUN cargo build --release
+RUN PQ_LIB_DIR= cargo build --release
 
 FROM debian:bookworm-slim
 
