@@ -6,8 +6,15 @@ API REST em Rust com [Actix Web](https://actix.rs/) e [Diesel](https://diesel.rs
 
 ```
 src/
-├── main.rs                  # Ponto de entrada, HttpServer + pool de conexões
+├── main.rs                  # Ponto de entrada, HttpServer + pool + JWT
 ├── schema.rs                # Definição das tabelas (Diesel table!)
+├── auth/
+│   ├── mod.rs               # Declaração do módulo
+│   ├── models.rs            # Claims JWT, LoginRequest/Response
+│   ├── jwt.rs               # Criação e verificação de tokens
+│   ├── extractor.rs         # Extractor AuthenticatedUser (FromRequest)
+│   ├── routes.rs            # Endpoints de autenticação
+│   └── service.rs           # Lógica de login (Argon2 + JWT)
 ├── libs/
 │   └── connection.rs        # Conexão directa (legado)
 ├── models/
@@ -23,6 +30,7 @@ src/
 
 ### Camadas
 
+- **`auth/`** — Autenticação JWT. Models, criação/verificação de tokens, extractor para proteger rotas, serviço de login.
 - **`routes/`** — Handlers HTTP. Extraem parâmetros do request e devolvem respostas.
 - **`services/`** — Lógica de negócio. Orquestra chamadas aos repositórios.
 - **`repositories/`** — Acesso a dados. Queries Diesel puras.
@@ -45,7 +53,7 @@ src/
 ```bash
 # 1. Configurar variáveis de ambiente
 cp .env.example .env
-# editar DATABASE_URL se necessário
+# editar DATABASE_URL e JWT_SECRET se necessário
 
 # 2. Criar o banco (se não existir)
 diesel database setup
@@ -57,29 +65,156 @@ diesel migration run
 cargo run
 ```
 
+### Variáveis de ambiente
+
+| Variável       | Obrigatória | Descrição                          |
+|----------------|-------------|------------------------------------|
+| `DATABASE_URL` | sim         | URL de conexão PostgreSQL          |
+| `JWT_SECRET`   | sim         | Chave secreta para assinar tokens JWT |
+
 ## Endpoints
 
-| Método | Rota             | Descrição                        |
-|--------|------------------|----------------------------------|
-| GET    | `/`              | Health check                     |
-| GET    | `/users`         | Listar users paginados           |
-| POST   | `/users`         | Criar novo user                  |
+| Método | Rota             | Autenticação        | Descrição                        |
+|--------|------------------|---------------------|----------------------------------|
+| GET    | `/`              | ❌                  | Health check                     |
+| POST   | `/users`         | ❌                  | Criar novo user (cadastro)       |
+| POST   | `/auth/login`    | ❌                  | Login → retorna JWT              |
+| GET    | `/auth/me`       | ✅ Bearer Token     | Dados do usuário logado          |
+| GET    | `/users`         | ✅ Bearer Token     | Listar users paginados           |
 
-### GET /users
+---
 
-Query params:
+### POST /users
+
+Cria um novo user. A password é encriptada com **Argon2** e o `id` é gerado automaticamente como UUID.
+
+**Body:**
+
+| Campo      | Tipo   | Obrigatório | Descrição                         |
+|------------|--------|-------------|-----------------------------------|
+| `name`     | string | sim         | Nome do user (max 100 caracteres) |
+| `email`    | string | sim         | Email válido                      |
+| `password` | string | sim         | Senha (mínimo 6 caracteres)       |
+
+**Exemplo:**
+```bash
+curl -X POST "http://localhost:8080/users" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"João Silva","email":"joao@email.com","password":"123456"}'
+```
+
+**Resposta sucesso (201):**
+```json
+{
+  "id": "a8d0f4f7-5657-4be9-8367-74f553995efd",
+  "name": "João Silva",
+  "email": "joao@email.com",
+  "created_at": "2026-07-06T13:49:21Z"
+}
+```
+
+**Erro de validação (422):**
+```json
+{
+  "errors": [
+    {"field": "name", "message": "Nome é obrigatório"},
+    {"field": "email", "message": "Email inválido"},
+    {"field": "password", "message": "Senha deve ter no mínimo 6 caracteres"}
+  ]
+}
+```
+
+---
+
+### POST /auth/login
+
+Autentica o user e retorna um token JWT (válido por 24h).
+
+**Body:**
+
+| Campo      | Tipo   | Obrigatório | Descrição                    |
+|------------|--------|-------------|------------------------------|
+| `email`    | string | sim         | Email do user                |
+| `password` | string | sim         | Senha do user                |
+
+**Exemplo:**
+```bash
+curl -X POST "http://localhost:8080/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"joao@email.com","password":"123456"}'
+```
+
+**Resposta sucesso (200):**
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhOGQwZjRmNy01NjU3LTRiZTktODM2Ny03NGY1NTM5OTVlZmQiLCJlbWFpbCI6ImpvYW9AZW1haWwuY29tIiwiZXhwIjoxNzUwOTUyMDAwfQ.abc123",
+  "user_id": "a8d0f4f7-5657-4be9-8367-74f553995efd",
+  "email": "joao@email.com"
+}
+```
+
+**Erro (401):**
+```json
+{
+  "error": "Email ou senha inválidos"
+}
+```
+
+> O token deve ser enviado no header `Authorization: Bearer <token>` nas rotas privadas.
+
+---
+
+### GET /auth/me
+
+Retorna os dados do user autenticado com base no token JWT.
+
+**Requires:** `Authorization: Bearer <token>`
+
+**Exemplo:**
+```bash
+curl "http://localhost:8080/auth/me" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.abc123"
+```
+
+**Resposta sucesso (200):**
+```json
+{
+  "id": "a8d0f4f7-5657-4be9-8367-74f553995efd",
+  "name": "João Silva",
+  "email": "joao@email.com",
+  "created_at": "2026-07-06T13:49:21Z"
+}
+```
+
+**Erro (401):**
+```json
+{
+  "error": "Token inválido: ..."
+}
+```
+
+---
+
+### GET /users (privada)
+
+Lista users com paginação. Requer autenticação.
+
+**Requires:** `Authorization: Bearer <token>`
+
+**Query params:**
 
 | Parâmetro  | Tipo  | Padrão | Descrição                |
 |------------|-------|--------|--------------------------|
 | `page`     | int   | 1      | Número da página         |
 | `per_page` | int   | 10     | Itens por página (1-100) |
 
-Exemplo:
+**Exemplo:**
 ```bash
-curl "http://localhost:8080/users?page=1&per_page=20"
+curl "http://localhost:8080/users?page=1&per_page=20" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.abc123"
 ```
 
-Resposta:
+**Resposta:**
 ```json
 {
   "data": [],
@@ -90,44 +225,24 @@ Resposta:
 }
 ```
 
-### POST /users
+---
 
-Cria um novo user. A password é encriptada com **Argon2** e o `id` é gerado automaticamente como UUID.
+### Fluxo completo de autenticação
 
-Body:
-
-| Campo      | Tipo   | Obrigatório | Descrição                         |
-|------------|--------|-------------|-----------------------------------|
-| `name`     | string | sim         | Nome do user (max 100 caracteres) |
-| `email`    | string | sim         | Email válido                      |
-| `password` | string | sim         | Senha (mínimo 6 caracteres)       |
-
-Exemplo:
 ```bash
+# 1. Criar conta
 curl -X POST "http://localhost:8080/users" \
   -H "Content-Type: application/json" \
-  -d '{"name":"João Silva","email":"joao@email.com","password":"123456"}'
-```
+  -d '{"name":"Maria","email":"maria@email.com","password":"123456"}'
 
-Resposta sucesso (201):
-```json
-{
-  "id": "a8d0f4f7-5657-4be9-8367-74f553995efd",
-  "name": "João Silva",
-  "email": "joao@email.com",
-  "created_at": "2026-07-06T13:49:21Z"
-}
-```
+# 2. Fazer login e guardar o token
+TOKEN=$(curl -s -X POST "http://localhost:8080/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"maria@email.com","password":"123456"}' | jq -r '.token')
 
-Erro de validação (422):
-```json
-{
-  "errors": [
-    {"field": "name", "message": "Nome é obrigatório"},
-    {"field": "email", "message": "Email inválido"},
-    {"field": "password", "message": "Senha deve ter no mínimo 6 caracteres"}
-  ]
-}
+# 3. Aceder a rotas privadas
+curl "http://localhost:8080/users" -H "Authorization: Bearer $TOKEN"
+curl "http://localhost:8080/auth/me" -H "Authorization: Bearer $TOKEN"
 ```
 
 ## Migrations
