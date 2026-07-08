@@ -1,6 +1,7 @@
 use actix_web::{get, post, web, HttpResponse, Responder};
 use serde::Deserialize;
 
+use crate::auth::extractor::AuthenticatedUser;
 use crate::models::user::CreateUserRequest;
 use crate::services::user_service::{self, DbPool};
 
@@ -17,6 +18,7 @@ pub struct PaginationParams {
 
 #[get("/users")]
 async fn list_users(
+    _auth: AuthenticatedUser,
     pool: web::Data<DbPool>,
     query: web::Query<PaginationParams>,
 ) -> impl Responder {

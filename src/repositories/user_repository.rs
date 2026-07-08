@@ -27,3 +27,13 @@ pub fn insert(conn: &mut PgConnection, new_user: &NewUser) -> QueryResult<User> 
         .values(new_user)
         .get_result(conn)
 }
+
+pub fn find_by_email(conn: &mut PgConnection, email: &str) -> QueryResult<User> {
+    users::table
+        .filter(users::email.eq(email))
+        .first::<User>(conn)
+}
+
+pub fn find_by_id(conn: &mut PgConnection, user_id: uuid::Uuid) -> QueryResult<User> {
+    users::table.find(user_id).first::<User>(conn)
+}
