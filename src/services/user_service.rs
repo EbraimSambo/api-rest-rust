@@ -79,6 +79,17 @@ pub fn create_user(
 ) -> Result<UserResponse, CreateUserError> {
     validate_input(&req).map_err(CreateUserError::Validation)?;
 
+    let mut conn = pool
+        .get()
+        .map_err(|e| CreateUserError::Internal(format!("Erro de conexão: {}", e)))?;
+
+    if user_repository::find_by_email(&mut conn, &req.email.trim().to_lowercase()).is_ok() {
+        return Err(CreateUserError::Validation(vec![ValidationError {
+            field: "email".into(),
+            message: "Email já cadastrado".into(),
+        }]));
+    }
+
     let salt = SaltString::generate(&mut OsRng);
     let argon2 = Argon2::default();
     let password_hash = argon2
@@ -92,10 +103,6 @@ pub fn create_user(
         password: password_hash,
         created_at: Utc::now(),
     };
-
-    let mut conn = pool
-        .get()
-        .map_err(|e| CreateUserError::Internal(format!("Erro de conexão: {}", e)))?;
 
     let user = user_repository::insert(&mut conn, &new_user)
         .map_err(|e| CreateUserError::Internal(format!("Erro ao inserir usuário: {}", e)))?;
